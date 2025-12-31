@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="es">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Neon Dashboard Cloud</title>
+		<link
+			href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"
+			rel="stylesheet"
+		/>
+		<link rel="stylesheet" href="css/styles.css" />
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+	</head>
+	<body>
+		<header>
+			<div class="logo-area">
+				<h1>⚡ Atajos Cloud</h1>
+			</div>
+			<div class="header-controls">
+				<button
+					id="btnEditMode"
+					class="btn-neon-outline"
+					style="display: none"
+					onclick="toggleEditMode()"
+				>
+					✍️ Editar
+				</button>
+
+				<button id="btnLogin" class="btn-neon-outline">
+					Iniciar Sesión con Google
+				</button>
+
+				<div
+					id="userInfo"
+					style="display: none; align-items: center; gap: 10px"
+				>
+					<img id="userPhoto" src="" />
+					<button class="btn-neon-outline" onclick="logout()">Salir</button>
+				</div>
+
+				<button
+					id="btnAddGroup"
+					class="btn-neon-outline"
+					style="display: none"
+					onclick="createNewGroup()"
+				>
+					+ Grupo
+				</button>
+			</div>
+		</header>
+
+		<div class="search-container">
+			<input
+				type="text"
+				id="searchInput"
+				placeholder="🔍 Buscar atajo..."
+				oninput="filterShortcuts()"
+			/>
+		</div>
+
+		<div
+			id="loginMessage"
+			style="text-align: center; color: white; margin-top: 50px"
+		>
+			<h2>🔒 Inicia sesión para ver tus atajos</h2>
+			<p style="color: #94a3b8">Tus enlaces se guardarán seguros en la nube.</p>
+		</div>
+
+		<div id="main-container"></div>
+
+		<div id="modal" class="modal-overlay">
+			<div class="modal-box glass-effect">
+				<h3 id="modalTitle">Nuevo Atajo</h3>
+				<input type="hidden" id="shortcutId" />
+				<input type="hidden" id="groupIdTarget" />
+
+				<div class="input-group">
+					<label>Nombre</label>
+					<input type="text" id="shortcutName" placeholder="Ej: Netflix" />
+				</div>
+
+				<div class="input-group">
+					<label>Enlace (URL)</label>
+					<input type="url" id="shortcutUrl" placeholder="https://..." />
+				</div>
+
+				<div class="modal-actions">
+					<button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+					<button class="btn-save" onclick="saveShortcut()">Guardar</button>
+				</div>
+			</div>
+		</div>
+
+		<script type="module" src="js/script.js"></script>
+	</body>
+</html>
