@@ -378,3 +378,44 @@ h1 {
 	cursor: pointer;
 	width: 48%;
 }
+
+/* --- RESPONSIVE DESIGN (MEJORAS PARA CELULAR) --- */
+
+@media (max-width: 600px) {
+    /* 1. Hacemos que el header pueda envolver los elementos */
+    header {
+        flex-direction: column; /* Logo arriba, botones abajo */
+        gap: 15px;
+        padding: 15px;
+        align-items: center;
+        text-align: center;
+    }
+
+    /* 2. Ajustamos los controles para que no se amontonen */
+    .header-controls {
+        flex-wrap: wrap; /* Si no caben los botones, bajan a la siguiente línea */
+        justify-content: center;
+        width: 100%;
+    }
+
+    /* 3. La barra de búsqueda ahora ocupa casi todo el ancho */
+    .search-container {
+        max-width: 90%;
+        margin-bottom: 25px;
+    }
+
+    /* 4. Reducimos un poco los grupos para que se vean mejor en vertical */
+    .group-section {
+        width: 90%; /* Ocupa el ancho del celular con margen */
+        padding: 15px;
+    }
+
+    /* 5. Ajustamos el tamaño de las Apps para que quepan bien las 3 columnas */
+    :root {
+        --app-size: 75px; /* Un pelín más pequeñas para evitar desbordes */
+    }
+
+    h1 {
+        font-size: 1.2rem; /* Logo un poco más pequeño */
+    }
+}
