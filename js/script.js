@@ -45,13 +45,7 @@ const btnAddGroup = document.getElementById('btnAddGroup');
 const modal = document.getElementById('modal');
 
 // Función para el sonido de clic (tipo iOS)
-const playClick = () => {
-	const audio = new Audio(
-		'https://www.soundjay.com/buttons/sounds/button-16.mp3',
-	);
-	audio.volume = 0.2; // Suavecito para que no aturda
-	audio.play();
-};
+
 
 // --- 2. SISTEMA DE LOGIN ---
 
