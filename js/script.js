@@ -277,8 +277,6 @@ window.submitVaultPin = () => {
                 if (pendingVaultCallback) {
                     pendingVaultCallback(pin);
                     pendingVaultCallback = null;
-                } else {
-                    alert('Vault unlocked successfully!');
                 }
             } else {
                 alert('Incorrect PIN!');
@@ -295,8 +293,6 @@ window.submitVaultPin = () => {
         if (pendingVaultCallback) {
             pendingVaultCallback(pin);
             pendingVaultCallback = null;
-        } else {
-            alert('Vault setup successful!');
         }
     }
 };
