@@ -236,6 +236,8 @@ h1 {
 	cursor: pointer;
 	transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 	position: relative;
+    -webkit-touch-callout: none;
+    pointer-events: auto;
 }
 
 .shortcut-card:hover {
@@ -251,6 +253,7 @@ h1 {
 	margin-bottom: 8px;
 	background-color: white;
 	padding: 5px;
+    pointer-events: none;
 }
 
 .shortcut-name {
