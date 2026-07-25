@@ -381,6 +381,11 @@ h1 {
 	cursor: pointer;
 	width: 48%;
 }
+.modal-box input[readonly] {
+	background: rgba(0, 0, 0, 0.2);
+	cursor: default;
+	outline: none;
+}
 
 .version-badge {
     background: rgba(139, 92, 246, 0.1); /* Morado neón muy suave */

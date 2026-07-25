@@ -14,7 +14,7 @@ import {
 	setDoc,
 } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 
-// --- 1. CONFIGURACIÓN (¡REEMPLAZA ESTO!) ---
+// --- 1. CONFIGURACIÓN ---
 const firebaseConfig = {
 	apiKey: 'AIzaSyA1Rtz-0Hg89Z84Ln9-9VxXvySGvfDNcKQ',
 	authDomain: 'misatajospro.firebaseapp.com',
@@ -25,7 +25,6 @@ const firebaseConfig = {
 	measurementId: 'G-CM8V6M7XET',
 };
 
-// Inicializar Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -34,6 +33,8 @@ const provider = new GoogleAuthProvider();
 // --- VARIABLES GLOBALES ---
 let groups = [];
 let currentUser = null;
+let vaultCheckData = null; // Stores the encrypted 'VAULT_OK' string
+let pendingVaultCallback = null;
 
 // Elementos DOM
 const mainContainer = document.getElementById('main-container');
@@ -42,91 +43,236 @@ const userInfo = document.getElementById('userInfo');
 const userPhoto = document.getElementById('userPhoto');
 const loginMessage = document.getElementById('loginMessage');
 const btnAddGroup = document.getElementById('btnAddGroup');
+const btnVaultConfig = document.getElementById('btnVaultConfig');
 const modal = document.getElementById('modal');
-
-// Función para el sonido de clic (tipo iOS)
-
+const vaultModal = document.getElementById('vaultModal');
+const credentialsModal = document.getElementById('credentialsModal');
 
 // --- 2. SISTEMA DE LOGIN ---
-
-// Escuchar cambios de sesión (Si entra o sale)
 onAuthStateChanged(auth, async (user) => {
 	if (user) {
-		// Usuario logueado
 		currentUser = user;
 		btnLogin.style.display = 'none';
 		userInfo.style.display = 'flex';
 		userPhoto.src = user.photoURL;
 		btnAddGroup.style.display = 'block';
+		btnVaultConfig.style.display = 'block';
 		loginMessage.style.display = 'none';
-
-		console.log('Usuario conectado:', user.displayName);
-		await loadDataFromCloud(); // Cargar datos de la nube
+		console.log('User connected:', user.displayName);
+		await loadDataFromCloud();
+		
+		// Prompt Vault on initial login if not already in session
+		if (!sessionStorage.getItem('vaultPIN')) {
+		    openVaultModal();
+		}
 	} else {
-		// Usuario desconectado
 		currentUser = null;
 		btnLogin.style.display = 'block';
 		userInfo.style.display = 'none';
 		btnAddGroup.style.display = 'none';
+		btnVaultConfig.style.display = 'none';
+		document.getElementById('btnEditMode').style.display = 'none';
 		loginMessage.style.display = 'block';
-		mainContainer.innerHTML = ''; // Limpiar pantalla
+		mainContainer.innerHTML = '';
 		groups = [];
+		sessionStorage.removeItem('vaultPIN');
 	}
 });
 
-// Botón Entrar
 btnLogin.addEventListener('click', () => {
 	signInWithPopup(auth, provider).catch((error) => {
-		console.error('Error al entrar:', error);
+		console.error('Login error:', error);
 	});
 });
 
-// Función Salir (Global para poder llamarla desde el HTML)
 window.logout = () => {
 	signOut(auth);
 };
 
 // --- 3. BASE DE DATOS (CLOUD) ---
-
-// Cargar datos
 async function loadDataFromCloud() {
 	if (!currentUser) return;
-
 	const docRef = doc(db, 'users', currentUser.uid);
 	const docSnap = await getDoc(docRef);
 
 	if (docSnap.exists()) {
 		const data = docSnap.data();
-		// Si el documento existe PERO el array de grupos está vacío
+		vaultCheckData = data.vaultCheck || null;
 		if (!data.misGrupos || data.misGrupos.length === 0) {
-			groups = [{ id: Date.now(), title: 'Nuevo Grupo', items: [] }];
+			groups = [{ id: Date.now(), title: 'New Group', items: [] }];
 			saveToCloud(); // Guardamos el grupo de cortesía
 		} else {
 			groups = data.misGrupos;
 		}
 	} else {
-		// Si es un usuario primerizo que nunca ha entrado
-		groups = [{ id: Date.now(), title: 'Bienvenido!', items: [] }];
+		groups = [{ id: Date.now(), title: 'Welcome!', items: [] }];
 		saveToCloud();
 	}
 	renderApp();
 }
 
-// Guardar datos (Esta función reemplaza al localStorage)
 async function saveToCloud() {
 	if (!currentUser) return;
-
 	const docRef = doc(db, 'users', currentUser.uid);
 	try {
-		await setDoc(docRef, { misGrupos: groups });
-		console.log('Guardado en la nube ☁️');
+		await setDoc(docRef, { misGrupos: groups, vaultCheck: vaultCheckData });
+		console.log('Saved to cloud ☁️');
 	} catch (e) {
-		console.error('Error guardando: ', e);
+		console.error('Error saving: ', e);
 	}
 }
 
-// --- 4. RENDERIZADO Y LÓGICA (CASI IGUAL QUE ANTES) ---
+// --- 4. VAULT (GESTIÓN DE CONTRASEÑAS) ---
+window.openVaultConfig = () => {
+    if (sessionStorage.getItem('vaultPIN')) {
+        document.getElementById('newVaultPinInput').value = '';
+        document.getElementById('changePinModal').style.display = 'flex';
+        document.getElementById('newVaultPinInput').focus();
+    } else {
+        openVaultModal();
+    }
+};
 
+window.submitNewVaultPin = () => {
+    const oldPin = sessionStorage.getItem('vaultPIN');
+    const newPin = document.getElementById('newVaultPinInput').value;
+    
+    if (newPin.length < 4) {
+        alert('PIN must be at least 4 digits.');
+        return;
+    }
+    if (newPin === oldPin) {
+        alert('New PIN cannot be the same as the old one.');
+        return;
+    }
+    
+    // 1. Re-encrypt the vault check string
+    vaultCheckData = CryptoJS.AES.encrypt('VAULT_OK', newPin).toString();
+    
+    // 2. Re-encrypt all items
+    groups.forEach(g => {
+        g.items.forEach(item => {
+            if (item.encUser || item.encPass) {
+                try {
+                    let decUser = item.encUser ? CryptoJS.AES.decrypt(item.encUser, oldPin).toString(CryptoJS.enc.Utf8) : null;
+                    let decPass = item.encPass ? CryptoJS.AES.decrypt(item.encPass, oldPin).toString(CryptoJS.enc.Utf8) : null;
+                    
+                    if (decUser) item.encUser = CryptoJS.AES.encrypt(decUser, newPin).toString();
+                    if (decPass) item.encPass = CryptoJS.AES.encrypt(decPass, newPin).toString();
+                } catch(e) {
+                    console.error("Failed to re-encrypt item during PIN change", item);
+                }
+            }
+        });
+    });
+    
+    // 3. Update session and save
+    sessionStorage.setItem('vaultPIN', newPin);
+    document.getElementById('changePinModal').style.display = 'none';
+    saveToCloud(); 
+    alert('Vault PIN changed successfully! All your passwords have been re-encrypted with the new PIN.');
+};
+
+window.openVaultModal = () => {
+    const title = document.getElementById('vaultModalTitle');
+    const desc = document.getElementById('vaultModalDesc');
+    const btn = document.getElementById('btnVaultAction');
+    const input = document.getElementById('vaultPinInput');
+    
+    input.value = '';
+    
+    if (vaultCheckData) {
+        title.innerText = '🔐 Unlock Vault';
+        desc.innerText = 'Enter your 4-6 digit PIN to unlock your passwords.';
+        btn.innerText = 'Unlock';
+    } else {
+        title.innerText = '🛡️ Setup Vault';
+        desc.innerText = 'Create a 4-6 digit PIN to protect your passwords. Do not forget it!';
+        btn.innerText = 'Create PIN';
+    }
+    
+    vaultModal.style.display = 'flex';
+    input.focus();
+};
+
+window.dismissVault = () => {
+    vaultModal.style.display = 'none';
+    pendingVaultCallback = null;
+};
+
+window.submitVaultPin = () => {
+    const pin = document.getElementById('vaultPinInput').value;
+    if (pin.length < 4) {
+        alert('PIN must be at least 4 digits.');
+        return;
+    }
+    
+    if (vaultCheckData) {
+        // Unlock existing vault
+        try {
+            const bytes = CryptoJS.AES.decrypt(vaultCheckData, pin);
+            const decrypted = bytes.toString(CryptoJS.enc.Utf8);
+            if (decrypted === 'VAULT_OK') {
+                sessionStorage.setItem('vaultPIN', pin);
+                vaultModal.style.display = 'none';
+                if (pendingVaultCallback) {
+                    pendingVaultCallback(pin);
+                    pendingVaultCallback = null;
+                } else {
+                    alert('Vault unlocked successfully!');
+                }
+            } else {
+                alert('Incorrect PIN!');
+            }
+        } catch (e) {
+            alert('Incorrect PIN!');
+        }
+    } else {
+        // Setup new vault
+        vaultCheckData = CryptoJS.AES.encrypt('VAULT_OK', pin).toString();
+        sessionStorage.setItem('vaultPIN', pin);
+        saveToCloud(); // Save the vaultCheckData
+        vaultModal.style.display = 'none';
+        if (pendingVaultCallback) {
+            pendingVaultCallback(pin);
+            pendingVaultCallback = null;
+        } else {
+            alert('Vault setup successful!');
+        }
+    }
+};
+
+window.resetVault = () => {
+    if (confirm('🚨 WARNING: This will permanently DELETE all encrypted passwords from your shortcuts. Are you sure you want to reset your vault?')) {
+        // Clear vault check
+        vaultCheckData = null;
+        sessionStorage.removeItem('vaultPIN');
+        
+        // Remove all encrypted credentials from all items
+        groups.forEach(g => {
+            g.items.forEach(item => {
+                delete item.encUser;
+                delete item.encPass;
+            });
+        });
+        
+        saveToCloud();
+        alert('Vault has been reset. You can now create a new PIN.');
+        openVaultModal();
+    }
+};
+
+window.requireVault = (callback) => {
+    const pin = sessionStorage.getItem('vaultPIN');
+    if (pin) {
+        callback(pin);
+    } else {
+        pendingVaultCallback = callback;
+        openVaultModal();
+    }
+};
+
+// --- 5. RENDERIZADO Y LÓGICA ---
 function renderApp() {
 	mainContainer.innerHTML = '';
 
@@ -135,14 +281,13 @@ function renderApp() {
 		section.className = 'group-section';
 		section.setAttribute('data-group-id', group.id);
 
-		// Aquí ponemos el título y los controles a la derecha
 		section.innerHTML = `
             <div class="group-header">
                 <input type="text" class="group-title" value="${group.title}" 
                        onchange="window.updateGroupTitle(${group.id}, this.value)">
                 <div class="group-controls">
-                    <button class="btn-group-action" onclick="window.handleAction(() => window.openModal(${group.id}))" title="Añadir Atajo">＋</button>
-                    <button class="btn-group-action" onclick="window.handleAction(() => window.deleteGroup(${group.id}))" title="Borrar Grupo">🗑️</button>
+                    <button class="btn-group-action" onclick="window.handleAction(() => window.openModal(${group.id}))" title="Add Shortcut">＋</button>
+                    <button class="btn-group-action" onclick="window.handleAction(() => window.deleteGroup(${group.id}))" title="Delete Group">🗑️</button>
                 </div>
             </div>
             <div class="group-content">
@@ -175,7 +320,6 @@ function renderApp() {
 	window.checkEditButton();
 }
 
-// Función para manejar acciones (sin sonido)
 window.handleAction = (callback) => {
 	callback();
 };
@@ -189,7 +333,11 @@ function createCard(item) {
 
 	const iconUrl = `https://www.google.com/s2/favicons?domain=${item.url}&sz=64`;
 
+    // Add a visual indicator if it has credentials
+    const hasCreds = (item.encUser || item.encPass) ? '<div style="position: absolute; top: 5px; left: 5px; font-size: 10px;" title="Has Credentials">🔐</div>' : '';
+
 	card.innerHTML = `
+        ${hasCreds}
         <img src="${iconUrl}" alt="icon" class="shortcut-icon" onerror="this.src='https://via.placeholder.com/64/000000/FFFFFF?text=?'">
         <span class="shortcut-name">${item.name}</span>
         <div class="card-actions">
@@ -198,7 +346,6 @@ function createCard(item) {
         </div>
     `;
 
-	// Lógica para click vs drag
 	let isDragging = false;
 	let startX, startY;
 	
@@ -215,32 +362,83 @@ function createCard(item) {
 	});
 	
 	card.addEventListener('mouseup', (e) => {
-		// Solo responder al clic izquierdo (button 0)
-		if (!isDragging && e.button === 0 && e.target.tagName !== 'BUTTON') {
-			window.open(item.url, '_blank');
+		if (!isDragging && e.target.tagName !== 'BUTTON') {
+		    if (e.button === 0) {
+		        // Left click: open URL
+			    window.open(item.url, '_blank');
+			}
 		}
+	});
+	
+	// Right click logic for credentials
+	card.addEventListener('contextmenu', (e) => {
+	    if (isDragging || e.target.tagName === 'BUTTON') return;
+	    e.preventDefault();
+	    if (item.encUser || item.encPass) {
+	        window.requireVault((pin) => {
+	            showCredentials(item, pin);
+	        });
+	    } else {
+	        // Optional: show native context menu or do nothing
+	        // e.preventDefault() is already called.
+	    }
 	});
 
 	return card;
 }
 
-// --- 5. FUNCIONES GLOBALES (Window) ---
+window.showCredentials = (item, pin) => {
+    try {
+        const uBytes = item.encUser ? CryptoJS.AES.decrypt(item.encUser, pin) : null;
+        const pBytes = item.encPass ? CryptoJS.AES.decrypt(item.encPass, pin) : null;
+        
+        document.getElementById('credUsername').value = uBytes ? uBytes.toString(CryptoJS.enc.Utf8) : '';
+        document.getElementById('credPassword').value = pBytes ? pBytes.toString(CryptoJS.enc.Utf8) : '';
+        document.getElementById('credPassword').type = 'password';
+        
+        credentialsModal.style.display = 'flex';
+    } catch (e) {
+        alert('Error decrypting credentials. Your vault PIN might be incorrect or data is corrupted.');
+    }
+};
 
-// Función auxiliar para guardar y pintar SIN leer el DOM (Para botones de Crear/Borrar)
+window.closeCredentialsModal = () => {
+    credentialsModal.style.display = 'none';
+};
+
+window.copyToClipboard = (elementId) => {
+    const el = document.getElementById(elementId);
+    el.select();
+    el.setSelectionRange(0, 99999);
+    navigator.clipboard.writeText(el.value).then(() => {
+        const oldBorder = el.style.borderColor;
+        el.style.borderColor = '#22c55e';
+        setTimeout(() => el.style.borderColor = oldBorder, 500);
+    });
+};
+
+window.togglePasswordVisibility = (elementId) => {
+    const el = document.getElementById(elementId);
+    if (el.type === "password") {
+        el.type = "text";
+    } else {
+        el.type = "password";
+    }
+};
+
+// --- 6. FUNCIONES GLOBALES (Window) ---
 function updateStateAndRender() {
-	saveToCloud(); // Guarda el array 'groups' tal cual como está en memoria
-	renderApp(); // Pinta la pantalla basada en ese array
+	saveToCloud(); 
+	renderApp(); 
 }
 
 window.createNewGroup = () => {
-	// Agregamos el grupo a la memoria
-	groups.push({ id: Date.now(), title: 'Nuevo Grupo', items: [] });
-	// Guardamos y pintamos directo (sin leer el DOM viejo)
+	groups.push({ id: Date.now(), title: 'New Group', items: [] });
 	updateStateAndRender();
 };
 
 window.deleteGroup = (id) => {
-	if (confirm('¿Borrar grupo completo?')) {
+	if (confirm('Delete entire group?')) {
 		groups = groups.filter((g) => g.id !== id);
 		updateStateAndRender();
 	}
@@ -249,14 +447,10 @@ window.deleteGroup = (id) => {
 window.updateGroupTitle = (id, newTitle) => {
 	const group = groups.find((g) => g.id === id);
 	if (group) group.title = newTitle;
-	// Aquí NO renderizamos para no perder el foco del input mientras escribes
-	// Pero si detectamos cambio, guardamos silenciosamente en la nube
 	saveToCloud();
 };
 
-// Esta función SOLO se usa para el Drag & Drop (Arrastrar y soltar)
 window.saveAllState = (render = false) => {
-	// Le damos un respiro al navegador para que el DOM se asiente
 	setTimeout(() => {
 		const sections = document.querySelectorAll('.group-section');
 		const newGroupsState = [];
@@ -264,15 +458,24 @@ window.saveAllState = (render = false) => {
 		sections.forEach((sec) => {
 			const gId = Number(sec.getAttribute('data-group-id'));
 			const titleInput = sec.querySelector('.group-title');
-			const title = titleInput ? titleInput.value : 'Sin título';
+			const title = titleInput ? titleInput.value : 'Untitled';
 
 			const items = [];
-			// Buscamos los atajos que REALMENTE están dentro de este grid ahora
 			sec.querySelectorAll('.shortcut-card').forEach((card) => {
+			    const cId = Number(card.getAttribute('data-id'));
+			    // Preserve original item properties (like encrypted creds)
+			    let originalItem = null;
+			    groups.forEach(g => {
+			        const found = g.items.find(i => i.id === cId);
+			        if (found) originalItem = found;
+			    });
+			    
 				items.push({
-					id: Number(card.getAttribute('data-id')),
+					id: cId,
 					name: card.getAttribute('data-name'),
 					url: card.getAttribute('data-url'),
+					encUser: originalItem ? originalItem.encUser : undefined,
+					encPass: originalItem ? originalItem.encPass : undefined
 				});
 			});
 
@@ -280,10 +483,10 @@ window.saveAllState = (render = false) => {
 		});
 
 		groups = newGroupsState;
-		saveToCloud(); // Guardamos en Firebase
+		saveToCloud(); 
 
 		if (render) renderApp();
-	}, 50); // 50ms es imperceptible para el humano pero eterno para el PC
+	}, 50); 
 };
 
 // --- MODAL Y CRUD DE ITEMS ---
@@ -292,7 +495,9 @@ window.openModal = (groupId) => {
 	document.getElementById('groupIdTarget').value = groupId;
 	document.getElementById('shortcutName').value = '';
 	document.getElementById('shortcutUrl').value = '';
-	document.getElementById('modalTitle').innerText = 'Nuevo Atajo';
+	document.getElementById('shortcutUser').value = '';
+	document.getElementById('shortcutPass').value = '';
+	document.getElementById('modalTitle').innerText = 'New Shortcut';
 	modal.style.display = 'flex';
 };
 
@@ -305,26 +510,50 @@ window.saveShortcut = () => {
 	const gId = Number(document.getElementById('groupIdTarget').value);
 	const name = document.getElementById('shortcutName').value;
 	let url = document.getElementById('shortcutUrl').value;
+	const user = document.getElementById('shortcutUser').value;
+	const pass = document.getElementById('shortcutPass').value;
 
-	if (!name || !url) return alert('Llena los datos parcero');
+	if (!name || !url) return alert('Please fill in Name and URL');
 	if (!url.startsWith('http')) url = 'https://' + url;
 
-	if (id) {
-		// Editar existente
-		groups.forEach((g) => {
-			const idx = g.items.findIndex((i) => i.id == id);
-			if (idx > -1) g.items[idx] = { id: Number(id), name, url };
-		});
-	} else {
-		// Crear nuevo
-		const group = groups.find((g) => g.id === gId);
-		if (group) group.items.push({ id: Date.now(), name, url });
-	}
+    const performSave = (pin) => {
+        let encUser, encPass;
+        if (pin && (user || pass)) {
+            if (user) encUser = CryptoJS.AES.encrypt(user, pin).toString();
+            if (pass) encPass = CryptoJS.AES.encrypt(pass, pin).toString();
+        }
 
-	// CORRECCIÓN AQUÍ TAMBIÉN: Usar updateStateAndRender en vez de saveAllState
-	updateStateAndRender();
-	window.checkEditButton();
-	window.closeModal();
+    	if (id) {
+    		// Editar existente
+    		groups.forEach((g) => {
+    			const idx = g.items.findIndex((i) => i.id == id);
+    			if (idx > -1) {
+    			    // If we provided new creds, update them. Else clear them if left blank.
+    			    g.items[idx] = { 
+    			        id: Number(id), 
+    			        name, 
+    			        url,
+    			        encUser: (user || pass) ? encUser : undefined,
+    			        encPass: (user || pass) ? encPass : undefined
+    			    };
+    			}
+    		});
+    	} else {
+    		// Crear nuevo
+    		const group = groups.find((g) => g.id === gId);
+    		if (group) group.items.push({ id: Date.now(), name, url, encUser, encPass });
+    	}
+
+    	updateStateAndRender();
+    	window.checkEditButton();
+    	window.closeModal();
+    };
+
+    if (user || pass) {
+        window.requireVault(performSave);
+    } else {
+        performSave(null);
+    }
 };
 
 window.prepareEdit = (itemId) => {
@@ -337,13 +566,36 @@ window.prepareEdit = (itemId) => {
 		document.getElementById('shortcutId').value = item.id;
 		document.getElementById('shortcutName').value = item.name;
 		document.getElementById('shortcutUrl').value = item.url;
-		document.getElementById('modalTitle').innerText = 'Editar';
-		modal.style.display = 'flex';
+		
+		const uInput = document.getElementById('shortcutUser');
+		const pInput = document.getElementById('shortcutPass');
+		uInput.value = '';
+		pInput.value = '';
+		
+		document.getElementById('modalTitle').innerText = 'Edit Shortcut';
+		
+		const openEditModal = (pin) => {
+		    if (pin && (item.encUser || item.encPass)) {
+		        try {
+		            if (item.encUser) uInput.value = CryptoJS.AES.decrypt(item.encUser, pin).toString(CryptoJS.enc.Utf8);
+		            if (item.encPass) pInput.value = CryptoJS.AES.decrypt(item.encPass, pin).toString(CryptoJS.enc.Utf8);
+		        } catch(e) {
+		            console.error("Failed to decrypt for edit");
+		        }
+		    }
+		    modal.style.display = 'flex';
+		};
+		
+		if (item.encUser || item.encPass) {
+		    window.requireVault(openEditModal);
+		} else {
+		    openEditModal(null);
+		}
 	}
 };
 
 window.deleteItem = (itemId) => {
-	if (confirm('¿Chao atajo?')) {
+	if (confirm('Delete shortcut?')) {
 		groups.forEach((g) => {
 			g.items = g.items.filter((i) => i.id !== itemId);
 		});
@@ -352,54 +604,50 @@ window.deleteItem = (itemId) => {
 	}
 };
 
-// --- FUNCIÓN PARA EL MODO JIGGLE (VIBRACIÓN) ---
 window.toggleEditMode = () => {
 	document.body.classList.toggle('edit-mode');
 	const btn = document.getElementById('btnEditMode');
 
 	if (document.body.classList.contains('edit-mode')) {
-		btn.innerText = '✅ Listo';
+		btn.innerText = '✅ Done';
 		btn.style.borderColor = 'var(--neon-purple)';
 		btn.style.color = 'var(--neon-purple)';
 	} else {
-		btn.innerText = '✍️ Editar';
+		btn.innerText = '✍️ Edit';
 		btn.style.borderColor = 'var(--neon-blue)';
 		btn.style.color = 'var(--neon-blue)';
 	}
 };
 
-// --- FUNCIÓN PARA FILTRAR (BÚSQUEDA) ---
 window.filterShortcuts = () => {
 	const term = document.getElementById('searchInput').value.toLowerCase();
 	const cards = document.querySelectorAll('.shortcut-card');
 
 	cards.forEach((card) => {
-		// Obtenemos el nombre que guardamos en el atributo data-name
 		const name = card.getAttribute('data-name').toLowerCase();
 
 		if (name.includes(term)) {
-			card.style.display = 'flex'; // Se muestra
+			card.style.display = 'flex';
 		} else {
-			card.style.display = 'none'; // Se oculta
+			card.style.display = 'none';
 		}
 	});
 };
+
 window.checkEditButton = () => {
 	const btnEdit = document.getElementById('btnEditMode');
 	if (!btnEdit) return;
 
-	// Contamos si hay al menos un atajo en todos los grupos
 	const hasShortcuts = groups.some(
 		(group) => group.items && group.items.length > 0,
 	);
 
 	if (hasShortcuts) {
-		btnEdit.style.display = 'block'; // O 'flex' según tu diseño
+		btnEdit.style.display = 'block'; 
 	} else {
 		btnEdit.style.display = 'none';
-		// Si el modo edición estaba activo y borraste el último atajo, lo apagamos
 		document.body.classList.remove('edit-mode');
-		btnEdit.innerText = '✍️ Editar';
+		btnEdit.innerText = '✍️ Edit';
 		btnEdit.style.borderColor = 'var(--neon-blue)';
 	}
 };
