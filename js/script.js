@@ -175,9 +175,8 @@ function renderApp() {
 	window.checkEditButton();
 }
 
-// Función para manejar clics con sonido
+// Función para manejar acciones (sin sonido)
 window.handleAction = (callback) => {
-	playClick();
 	callback();
 };
 
@@ -201,16 +200,23 @@ function createCard(item) {
 
 	// Lógica para click vs drag
 	let isDragging = false;
-	card.addEventListener('mousedown', () => (isDragging = false));
-	card.addEventListener('mousemove', () => (isDragging = true));
-	card.addEventListener('mouseup', (e) => {
-		if (!isDragging && e.target.tagName !== 'BUTTON') {
-			window.open(item.url, '_blank');
+	let startX, startY;
+	
+	card.addEventListener('mousedown', (e) => {
+		isDragging = false;
+		startX = e.clientX;
+		startY = e.clientY;
+	});
+	
+	card.addEventListener('mousemove', (e) => {
+		if (Math.abs(e.clientX - startX) > 3 || Math.abs(e.clientY - startY) > 3) {
+			isDragging = true;
 		}
 	});
+	
 	card.addEventListener('mouseup', (e) => {
-		if (!isDragging && e.target.tagName !== 'BUTTON') {
-			playClick(); // Suena al abrir
+		// Solo responder al clic izquierdo (button 0)
+		if (!isDragging && e.button === 0 && e.target.tagName !== 'BUTTON') {
 			window.open(item.url, '_blank');
 		}
 	});
