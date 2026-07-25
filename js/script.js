@@ -47,6 +47,64 @@ const btnVaultConfig = document.getElementById('btnVaultConfig');
 const modal = document.getElementById('modal');
 const vaultModal = document.getElementById('vaultModal');
 const credentialsModal = document.getElementById('credentialsModal');
+const iconPreview = document.getElementById('shortcutIconPreview');
+const iconFile = document.getElementById('shortcutIconFile');
+const iconBase64 = document.getElementById('shortcutIconBase64');
+const btnRemoveIcon = document.getElementById('btnRemoveIcon');
+
+// --- 1.5 LOGICA DE SUBIDA DE ICONO ---
+iconPreview.addEventListener('click', () => {
+    iconFile.click();
+});
+
+btnRemoveIcon.addEventListener('click', (e) => {
+    e.preventDefault();
+    iconBase64.value = '';
+    iconPreview.src = 'https://via.placeholder.com/64/1e293b/FFFFFF?text=+';
+    btnRemoveIcon.style.display = 'none';
+    iconFile.value = '';
+});
+
+iconFile.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const MAX_SIZE = 128;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height) {
+                if (width > MAX_SIZE) {
+                    height *= MAX_SIZE / width;
+                    width = MAX_SIZE;
+                }
+            } else {
+                if (height > MAX_SIZE) {
+                    width *= MAX_SIZE / height;
+                    height = MAX_SIZE;
+                }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            const dataUrl = canvas.toDataURL('image/webp', 0.8);
+            
+            iconBase64.value = dataUrl;
+            iconPreview.src = dataUrl;
+            btnRemoveIcon.style.display = 'block';
+        };
+        img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+});
 
 // --- 2. SISTEMA DE LOGIN ---
 onAuthStateChanged(auth, async (user) => {
@@ -283,8 +341,11 @@ function renderApp() {
 
 		section.innerHTML = `
             <div class="group-header">
-                <input type="text" class="group-title" value="${group.title}" 
-                       onchange="window.updateGroupTitle(${group.id}, this.value)">
+                <div style="display: flex; align-items: center; width: 100%;">
+                    <span class="group-drag-handle" title="Drag Group">☰</span>
+                    <input type="text" class="group-title" value="${group.title}" 
+                           onchange="window.updateGroupTitle(${group.id}, this.value)">
+                </div>
                 <div class="group-controls">
                     <button class="btn-group-action" onclick="window.handleAction(() => window.openModal(${group.id}))" title="Add Shortcut">＋</button>
                     <button class="btn-group-action" onclick="window.handleAction(() => window.deleteGroup(${group.id}))" title="Delete Group">🗑️</button>
@@ -317,6 +378,15 @@ function renderApp() {
 			onRemove: () => window.saveAllState(false),
 		});
 	});
+	
+	// Make groups draggable
+	Sortable.create(mainContainer, {
+		animation: 250,
+		handle: '.group-drag-handle',
+		ghostClass: 'sortable-ghost-group',
+		onUpdate: () => window.saveAllState(false)
+	});
+	
 	window.checkEditButton();
 }
 
@@ -331,14 +401,14 @@ function createCard(item) {
 	card.setAttribute('data-name', item.name);
 	card.setAttribute('data-url', item.url);
 
-	const iconUrl = `https://www.google.com/s2/favicons?domain=${item.url}&sz=64`;
+	const finalIconUrl = item.iconUrl ? item.iconUrl : `https://www.google.com/s2/favicons?domain=${item.url}&sz=64`;
 
     // Add a visual indicator if it has credentials
     const hasCreds = (item.encUser || item.encPass) ? '<div style="position: absolute; top: 5px; left: 5px; font-size: 10px;" title="Has Credentials">🔐</div>' : '';
 
 	card.innerHTML = `
         ${hasCreds}
-        <img src="${iconUrl}" alt="icon" class="shortcut-icon" onerror="this.src='https://via.placeholder.com/64/000000/FFFFFF?text=?'">
+        <img src="${finalIconUrl}" alt="icon" class="shortcut-icon" onerror="this.src='https://via.placeholder.com/64/000000/FFFFFF?text=?'">
         <span class="shortcut-name">${item.name}</span>
         <div class="card-actions">
             <button class="mini-btn btn-edit" onmousedown="event.stopPropagation()" onclick="window.prepareEdit(${item.id})">✏️</button>
@@ -463,20 +533,25 @@ window.saveAllState = (render = false) => {
 			const items = [];
 			sec.querySelectorAll('.shortcut-card').forEach((card) => {
 			    const cId = Number(card.getAttribute('data-id'));
-			    // Preserve original item properties (like encrypted creds)
+			    // Preserve original item properties (like encrypted creds and custom icon)
 			    let originalItem = null;
 			    groups.forEach(g => {
 			        const found = g.items.find(i => i.id === cId);
 			        if (found) originalItem = found;
 			    });
 			    
-				items.push({
+			    const newItem = {
 					id: cId,
 					name: card.getAttribute('data-name'),
-					url: card.getAttribute('data-url'),
-					encUser: originalItem ? originalItem.encUser : undefined,
-					encPass: originalItem ? originalItem.encPass : undefined
-				});
+					url: card.getAttribute('data-url')
+				};
+				
+				// Fix the undefined bug by only adding properties if they exist
+				if (originalItem && originalItem.iconUrl) newItem.iconUrl = originalItem.iconUrl;
+				if (originalItem && originalItem.encUser) newItem.encUser = originalItem.encUser;
+				if (originalItem && originalItem.encPass) newItem.encPass = originalItem.encPass;
+				
+				items.push(newItem);
 			});
 
 			newGroupsState.push({ id: gId, title, items });
@@ -495,6 +570,10 @@ window.openModal = (groupId) => {
 	document.getElementById('groupIdTarget').value = groupId;
 	document.getElementById('shortcutName').value = '';
 	document.getElementById('shortcutUrl').value = '';
+	document.getElementById('shortcutIconBase64').value = '';
+	document.getElementById('shortcutIconPreview').src = 'https://via.placeholder.com/64/1e293b/FFFFFF?text=+';
+	document.getElementById('btnRemoveIcon').style.display = 'none';
+	document.getElementById('shortcutIconFile').value = '';
 	document.getElementById('shortcutUser').value = '';
 	document.getElementById('shortcutPass').value = '';
 	document.getElementById('modalTitle').innerText = 'New Shortcut';
@@ -510,6 +589,7 @@ window.saveShortcut = () => {
 	const gId = Number(document.getElementById('groupIdTarget').value);
 	const name = document.getElementById('shortcutName').value;
 	let url = document.getElementById('shortcutUrl').value;
+	const iconUrl = document.getElementById('shortcutIconBase64').value;
 	const user = document.getElementById('shortcutUser').value;
 	const pass = document.getElementById('shortcutPass').value;
 
@@ -528,20 +608,40 @@ window.saveShortcut = () => {
     		groups.forEach((g) => {
     			const idx = g.items.findIndex((i) => i.id == id);
     			if (idx > -1) {
-    			    // If we provided new creds, update them. Else clear them if left blank.
-    			    g.items[idx] = { 
-    			        id: Number(id), 
-    			        name, 
-    			        url,
-    			        encUser: (user || pass) ? encUser : undefined,
-    			        encPass: (user || pass) ? encPass : undefined
+    			    // Build object cleanly to avoid undefined properties crashing Firebase
+    			    const updatedItem = {
+    			        id: Number(id),
+    			        name,
+    			        url
     			    };
+    			    if (iconUrl) updatedItem.iconUrl = iconUrl;
+    			    
+    			    // If we provided new creds, update them.
+    			    if (user || pass) {
+    			        if (encUser) updatedItem.encUser = encUser;
+    			        if (encPass) updatedItem.encPass = encPass;
+    			    } else {
+                        // If fields are empty, preserve old creds UNLESS vault is unlocked (intentional clear)
+                        if (!sessionStorage.getItem('vaultPIN')) {
+                            if (g.items[idx].encUser) updatedItem.encUser = g.items[idx].encUser;
+                            if (g.items[idx].encPass) updatedItem.encPass = g.items[idx].encPass;
+                        }
+                    }
+    			    
+    			    g.items[idx] = updatedItem;
     			}
     		});
     	} else {
     		// Crear nuevo
     		const group = groups.find((g) => g.id === gId);
-    		if (group) group.items.push({ id: Date.now(), name, url, encUser, encPass });
+    		if (group) {
+    		    const newItem = { id: Date.now(), name, url };
+    		    if (iconUrl) newItem.iconUrl = iconUrl;
+    		    if (encUser) newItem.encUser = encUser;
+    		    if (encPass) newItem.encPass = encPass;
+    		    
+    		    group.items.push(newItem);
+    		}
     	}
 
     	updateStateAndRender();
@@ -566,6 +666,16 @@ window.prepareEdit = (itemId) => {
 		document.getElementById('shortcutId').value = item.id;
 		document.getElementById('shortcutName').value = item.name;
 		document.getElementById('shortcutUrl').value = item.url;
+		
+		if (item.iconUrl) {
+		    document.getElementById('shortcutIconBase64').value = item.iconUrl;
+		    document.getElementById('shortcutIconPreview').src = item.iconUrl;
+		    document.getElementById('btnRemoveIcon').style.display = 'block';
+		} else {
+		    document.getElementById('shortcutIconBase64').value = '';
+		    document.getElementById('shortcutIconPreview').src = 'https://via.placeholder.com/64/1e293b/FFFFFF?text=+';
+		    document.getElementById('btnRemoveIcon').style.display = 'none';
+		}
 		
 		const uInput = document.getElementById('shortcutUser');
 		const pInput = document.getElementById('shortcutPass');

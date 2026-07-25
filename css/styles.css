@@ -113,6 +113,28 @@ h1 {
 	animation: fadeIn 0.5s ease-out;
 }
 
+/* Drag Handle para mover grupos */
+.group-drag-handle {
+    cursor: grab;
+    color: var(--text-muted);
+    font-size: 1.2rem;
+    margin-right: 8px;
+    user-select: none;
+    transition: 0.2s;
+    display: flex;
+    align-items: center;
+}
+.group-drag-handle:hover {
+    color: var(--text-main);
+}
+.group-drag-handle:active {
+    cursor: grabbing;
+}
+.sortable-ghost-group {
+    opacity: 0.4;
+    background: rgba(30, 41, 59, 0.8);
+}
+
 /* --- NUEVOS ESTILOS PARA ICONOS DE CABECERA --- */
 .group-header {
 	display: flex;
