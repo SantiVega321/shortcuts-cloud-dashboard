@@ -51,6 +51,7 @@ const iconPreview = document.getElementById('shortcutIconPreview');
 const iconFile = document.getElementById('shortcutIconFile');
 const iconBase64 = document.getElementById('shortcutIconBase64');
 const btnRemoveIcon = document.getElementById('btnRemoveIcon');
+const defaultIcon = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'><rect width='64' height='64' fill='%231e293b'/><text x='50%' y='50%' font-size='32' fill='%23ffffff' text-anchor='middle' dy='.3em'>+</text></svg>";
 
 // --- 1.5 LOGICA DE SUBIDA DE ICONO ---
 iconPreview.addEventListener('click', () => {
@@ -60,7 +61,7 @@ iconPreview.addEventListener('click', () => {
 btnRemoveIcon.addEventListener('click', (e) => {
     e.preventDefault();
     iconBase64.value = '';
-    iconPreview.src = 'https://via.placeholder.com/64/1e293b/FFFFFF?text=+';
+    iconPreview.src = defaultIcon;
     btnRemoveIcon.style.display = 'none';
     iconFile.value = '';
 });
@@ -408,7 +409,7 @@ function createCard(item) {
 
 	card.innerHTML = `
         ${hasCreds}
-        <img src="${finalIconUrl}" alt="icon" class="shortcut-icon" onerror="this.src='https://via.placeholder.com/64/000000/FFFFFF?text=?'">
+        <img src="${finalIconUrl}" alt="icon" class="shortcut-icon" style="object-fit: cover;" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'64\\' height=\\'64\\'><rect width=\\'64\\' height=\\'64\\' fill=\\'%231e293b\\'/><text x=\\'50%\\' y=\\'50%\\' font-size=\\'32\\' fill=\\'%23ffffff\\' text-anchor=\\'middle\\' dy=\\'.3em\\'>?</text></svg>'">
         <span class="shortcut-name">${item.name}</span>
         <div class="card-actions">
             <button class="mini-btn btn-edit" onmousedown="event.stopPropagation()" onclick="window.prepareEdit(${item.id})">✏️</button>
@@ -571,7 +572,7 @@ window.openModal = (groupId) => {
 	document.getElementById('shortcutName').value = '';
 	document.getElementById('shortcutUrl').value = '';
 	document.getElementById('shortcutIconBase64').value = '';
-	document.getElementById('shortcutIconPreview').src = 'https://via.placeholder.com/64/1e293b/FFFFFF?text=+';
+	document.getElementById('shortcutIconPreview').src = defaultIcon;
 	document.getElementById('btnRemoveIcon').style.display = 'none';
 	document.getElementById('shortcutIconFile').value = '';
 	document.getElementById('shortcutUser').value = '';
@@ -673,7 +674,7 @@ window.prepareEdit = (itemId) => {
 		    document.getElementById('btnRemoveIcon').style.display = 'block';
 		} else {
 		    document.getElementById('shortcutIconBase64').value = '';
-		    document.getElementById('shortcutIconPreview').src = 'https://via.placeholder.com/64/1e293b/FFFFFF?text=+';
+		    document.getElementById('shortcutIconPreview').src = defaultIcon;
 		    document.getElementById('btnRemoveIcon').style.display = 'none';
 		}
 		

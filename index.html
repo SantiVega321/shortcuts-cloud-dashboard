@@ -107,8 +107,8 @@
 				<div class="input-group">
 					<label>Custom Icon (Optional)</label>
 					<div class="icon-upload-container" style="display: flex; align-items: center;">
-					    <img id="shortcutIconPreview" src="https://via.placeholder.com/64/1e293b/FFFFFF?text=+" class="shortcut-icon" style="cursor: pointer; width: 48px; height: 48px; margin: 0; box-shadow: none;" title="Click to upload icon">
-					    <input type="file" id="shortcutIconFile" accept="image/*" style="display: none;" />
+					    <img id="shortcutIconPreview" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'><rect width='64' height='64' fill='%231e293b'/><text x='50%' y='50%' font-size='32' fill='%23ffffff' text-anchor='middle' dy='.3em'>+</text></svg>" class="shortcut-icon" style="cursor: pointer; width: 48px; height: 48px; margin: 0; box-shadow: none; object-fit: cover; border-radius: 12px; border: 1px dashed var(--neon-blue);" title="Click to upload icon">
+					    <input type="file" id="shortcutIconFile" accept="image/*" style="position: absolute; width: 0; height: 0; opacity: 0; z-index: -1;" />
 					    <input type="hidden" id="shortcutIconBase64" value="" />
 					    <button id="btnRemoveIcon" class="mini-btn btn-delete" style="display: none; padding: 4px 8px; margin-left: 15px;" title="Remove Custom Icon">✕ Remove</button>
 					</div>
